@@ -1,0 +1,79 @@
+# -----------------------------
+# PATH
+# -----------------------------
+export PATH="$HOME/.local/bin:$PATH"
+
+# -----------------------------
+# Zinit
+# -----------------------------
+if [ -f "{{ zinit_repo_dest }}/zinit.zsh" ]; then
+  source "{{ zinit_repo_dest }}/zinit.zsh"
+
+  zinit ice wait lucid
+  zinit light zsh-users/zsh-autosuggestions
+  zinit light zsh-users/zsh-syntax-highlighting
+  zinit light zsh-users/zsh-completions
+  zinit light zsh-users/zsh-history-substring-search
+  zinit light Aloxaf/fzf-tab
+fi
+
+# -----------------------------
+# Prompt (Starship)
+# -----------------------------
+if command -v starship >/dev/null 2>&1; then
+  eval "$(starship init zsh)"
+fi
+
+# -----------------------------
+# History
+# -----------------------------
+HISTFILE=~/.zsh_history
+HISTSIZE=50000
+SAVEHIST=50000
+setopt appendhistory sharehistory histignoredups
+
+# -----------------------------
+# Completion
+# -----------------------------
+autoload -Uz compinit
+compinit
+
+# -----------------------------
+# Keybinds
+# -----------------------------
+bindkey '^R' history-incremental-search-backward
+
+# -----------------------------
+# Aliases (DevOps/homelab focused)
+# -----------------------------
+if command -v eza >/dev/null 2>&1; then
+  alias ls="eza --icons"
+  alias ll="eza -lah --icons"
+fi
+
+if command -v bat >/dev/null 2>&1; then
+  alias cat="bat --paging=never"
+elif command -v batcat >/dev/null 2>&1; then
+  alias cat="batcat --paging=never"
+fi
+
+if command -v nvim >/dev/null 2>&1; then
+  alias vim="nvim"
+fi
+
+alias g="git"
+alias k="kubectl"
+alias p="podman"
+alias d="docker"
+
+# -----------------------------
+# Tools
+# -----------------------------
+if command -v zoxide >/dev/null 2>&1; then
+  eval "$(zoxide init zsh)"
+fi
+
+if command -v uv >/dev/null 2>&1; then
+  alias pip="uv pip"
+  alias pip3="uv pip"
+fi

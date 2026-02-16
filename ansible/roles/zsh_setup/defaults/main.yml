@@ -1,0 +1,22 @@
+---
+bootstrap_user: "{{ ansible_user_id }}"
+bootstrap_home: "{{ ansible_env.HOME | default('/home/' + bootstrap_user) }}"
+
+zsh_packages:
+  - zsh
+  - git
+  - curl
+  - fzf
+  - ripgrep
+  - bat
+  - eza
+  - zoxide
+
+starship_install: true
+
+zinit_repo: "https://github.com/zdharma-continuum/zinit.git"
+zinit_dir: "{{ bootstrap_home }}/.local/share/zinit"
+zinit_repo_dest: "{{ zinit_dir }}/zinit.git"
+
+zshrc_path: "{{ bootstrap_home }}/.zshrc"
+starship_config_path: "{{ bootstrap_home }}/.config/starship.toml"

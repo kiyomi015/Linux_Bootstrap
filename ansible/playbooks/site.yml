@@ -1,0 +1,8 @@
+---
+- name: Desktop bootstrap
+  hosts: all
+  gather_facts: true
+  roles:
+    - packages_setup
+    - zsh_setup
+    - nvim_setup

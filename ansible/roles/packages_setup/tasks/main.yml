@@ -1,0 +1,437 @@
+---
+- name: Build package list from generic groups
+  ansible.builtin.set_fact:
+    packages_all: "{{ (packages_all | default([])) + (mapped if (mapped is sequence and (mapped is not string)) else [mapped]) }}"
+  vars:
+    mapped: "{{ package_name_map.get(ansible_distribution, {}).get(item, item) }}"
+  loop: "{{ packages_common_all + packages_extra_by_distro.get(ansible_distribution, []) }}"
+
+- name: Ensure extra repositories are enabled (Debian backports)
+  ansible.builtin.apt_repository:
+    repo: "deb http://deb.debian.org/debian {{ ansible_distribution_release }}-backports {{ debian_backports_components | join(' ') }}"
+    filename: debian-backports
+    state: present
+  when:
+    - extra_repos_enable
+    - debian_backports_enable
+    - ansible_distribution == "Debian"
+
+- name: Ensure extra repositories are enabled (Ubuntu universe)
+  ansible.builtin.apt_repository:
+    repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} universe"
+    filename: ubuntu-universe
+    state: present
+  when:
+    - extra_repos_enable
+    - ubuntu_universe_enable
+    - ansible_distribution == "Ubuntu"
+
+- name: Ensure extra repositories are enabled (Ubuntu multiverse)
+  ansible.builtin.apt_repository:
+    repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} multiverse"
+    filename: ubuntu-multiverse
+    state: present
+  when:
+    - extra_repos_enable
+    - ubuntu_multiverse_enable
+    - ansible_distribution == "Ubuntu"
+
+- name: Ensure VS Code repo dependencies (apt)
+  ansible.builtin.package:
+    name: "{{ vscode_repo_deps_apt }}"
+    state: present
+  when:
+    - vscode_enable
+    - vscode_repo_enable
+    - ansible_facts.pkg_mgr == "apt"
+
+- name: Download VS Code signing key (apt)
+  ansible.builtin.get_url:
+    url: "{{ vscode_repo_key_url }}"
+    dest: /tmp/microsoft.asc
+    mode: "0644"
+  when:
+    - vscode_enable
+    - vscode_repo_enable
+    - ansible_facts.pkg_mgr == "apt"
+
+- name: Install VS Code keyring (apt)
+  ansible.builtin.command: "gpg --dearmor -o {{ vscode_repo_keyring_path }} /tmp/microsoft.asc"
+  args:
+    creates: "{{ vscode_repo_keyring_path }}"
+  when:
+    - vscode_enable
+    - vscode_repo_enable
+    - ansible_facts.pkg_mgr == "apt"
+
+- name: Ensure VS Code keyring permissions (apt)
+  ansible.builtin.file:
+    path: "{{ vscode_repo_keyring_path }}"
+    mode: "0644"
+  when:
+    - vscode_enable
+    - vscode_repo_enable
+    - ansible_facts.pkg_mgr == "apt"
+
+- name: Configure VS Code apt repository
+  ansible.builtin.copy:
+    dest: "{{ vscode_repo_sources_path }}"
+    content: "{{ vscode_repo_sources_content }}"
+    mode: "0644"
+  when:
+    - vscode_enable
+    - vscode_repo_enable
+    - ansible_facts.pkg_mgr == "apt"
+
+- name: Configure VS Code yum/dnf repository
+  ansible.builtin.yum_repository:
+    name: code
+    description: Visual Studio Code
+    baseurl: "{{ vscode_yumrepo_baseurl }}"
+    enabled: true
+    gpgcheck: true
+    gpgkey: "{{ vscode_repo_key_url }}"
+  when:
+    - vscode_enable
+    - vscode_repo_enable
+    - ansible_facts.pkg_mgr in ["dnf", "yum"]
+
+- name: Update apt cache when using apt
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_facts.pkg_mgr == "apt"
+
+- name: Install flatpak
+  ansible.builtin.package:
+    name: "{{ flatpak_package }}"
+    state: present
+  when: flatpak_enable
+
+- name: Add flathub remote
+  ansible.builtin.command: "flatpak remote-add --if-not-exists --system {{ flatpak_remote_name }} {{ flatpak_remote_url }}"
+  changed_when: false
+  when: flatpak_enable
+
+- name: Install core packages
+  ansible.builtin.package:
+    name: "{{ packages_all }}"
+    state: present
+
+- name: Install VS Code
+  ansible.builtin.package:
+    name: "{{ vscode_package }}"
+    state: present
+  when:
+    - vscode_enable
+    - ansible_facts.pkg_mgr in ["apt", "dnf", "yum"]
+
+- name: Determine Ghostty install strategy
+  ansible.builtin.set_fact:
+    ghostty_use_copr: "{{ ansible_distribution == 'Fedora' and (ghostty_install_method == 'copr' or (ghostty_install_method == 'auto' and ghostty_fedora_source == 'copr')) }}"
+    ghostty_use_terra: "{{ ansible_distribution == 'Fedora' and (ghostty_install_method == 'terra' or (ghostty_install_method == 'auto' and ghostty_fedora_source == 'terra')) }}"
+    ghostty_use_snap: "{{ ghostty_install_method == 'snap' }}"
+  when: ghostty_enable
+
+- name: Install Copr tooling (Fedora)
+  ansible.builtin.package:
+    name: dnf-plugins-core
+    state: present
+  when:
+    - ghostty_enable
+    - ghostty_use_copr
+    - ansible_facts.pkg_mgr in ["dnf", "yum"]
+
+- name: Enable Ghostty Copr repo (Fedora dnf/yum)
+  ansible.builtin.command: "dnf -y copr enable {{ ghostty_fedora_copr }}"
+  args:
+    creates: "{{ ghostty_fedora_copr_repo_path }}"
+  when:
+    - ghostty_enable
+    - ghostty_use_copr
+    - ansible_facts.pkg_mgr in ["dnf", "yum"]
+
+- name: Add Ghostty Copr repo (Fedora rpm-ostree)
+  ansible.builtin.get_url:
+    url: "{{ ghostty_fedora_copr_repo_url }}"
+    dest: "{{ ghostty_fedora_copr_repo_path }}"
+    mode: "0644"
+  when:
+    - ghostty_enable
+    - ghostty_use_copr
+    - ansible_facts.pkg_mgr == "rpm-ostree"
+
+- name: Enable Terra repo (Fedora dnf/yum)
+  ansible.builtin.command: >-
+    dnf -y install --nogpgcheck --repofrompath 'terra,{{ ghostty_fedora_terra_repo_url }}' {{ ghostty_fedora_terra_release }}
+  args:
+    creates: "{{ ghostty_fedora_terra_repo_path }}"
+  when:
+    - ghostty_enable
+    - ghostty_use_terra
+    - ansible_facts.pkg_mgr in ["dnf", "yum"]
+
+- name: Add Terra repo (Fedora rpm-ostree)
+  ansible.builtin.get_url:
+    url: https://github.com/terrapkg/subatomic-repos/raw/main/terra.repo
+    dest: "{{ ghostty_fedora_terra_repo_path }}"
+    mode: "0644"
+  when:
+    - ghostty_enable
+    - ghostty_use_terra
+    - ansible_facts.pkg_mgr == "rpm-ostree"
+
+- name: Check Ghostty package availability (apt)
+  ansible.builtin.command: "apt-cache show {{ ghostty_package_name }}"
+  register: ghostty_pkg_check
+  changed_when: false
+  failed_when: false
+  when:
+    - ghostty_enable
+    - ansible_distribution != "Fedora"
+    - ghostty_install_method in ["auto", "package"]
+    - ansible_facts.pkg_mgr == "apt"
+
+- name: Check Ghostty package availability (dnf)
+  ansible.builtin.command: "dnf list {{ ghostty_package_name }}"
+  register: ghostty_pkg_check
+  changed_when: false
+  failed_when: false
+  when:
+    - ghostty_enable
+    - ansible_distribution != "Fedora"
+    - ghostty_install_method in ["auto", "package"]
+    - ansible_facts.pkg_mgr == "dnf"
+
+- name: Check Ghostty package availability (yum)
+  ansible.builtin.command: "yum list {{ ghostty_package_name }}"
+  register: ghostty_pkg_check
+  changed_when: false
+  failed_when: false
+  when:
+    - ghostty_enable
+    - ansible_distribution != "Fedora"
+    - ghostty_install_method in ["auto", "package"]
+    - ansible_facts.pkg_mgr == "yum"
+
+- name: Check Ghostty package availability (pacman)
+  ansible.builtin.command: "pacman -Si {{ ghostty_package_name }}"
+  register: ghostty_pkg_check
+  changed_when: false
+  failed_when: false
+  when:
+    - ghostty_enable
+    - ansible_distribution != "Fedora"
+    - ghostty_install_method in ["auto", "package"]
+    - ansible_facts.pkg_mgr == "pacman"
+
+- name: Set Ghostty package availability
+  ansible.builtin.set_fact:
+    ghostty_pkg_available: "{{ ghostty_pkg_check is defined and ghostty_pkg_check.rc == 0 }}"
+  when:
+    - ghostty_enable
+    - ansible_distribution != "Fedora"
+    - ghostty_install_method in ["auto", "package"]
+
+- name: Install Ghostty via system packages (Fedora)
+  ansible.builtin.package:
+    name: "{{ ghostty_package_name }}"
+    state: present
+  when:
+    - ghostty_enable
+    - ansible_distribution == "Fedora"
+    - ansible_facts.pkg_mgr in ["dnf", "yum"]
+    - ghostty_use_copr or ghostty_use_terra
+
+- name: Install Ghostty via system packages (non-Fedora)
+  ansible.builtin.package:
+    name: "{{ ghostty_package_name }}"
+    state: present
+  when:
+    - ghostty_enable
+    - ansible_distribution != "Fedora"
+    - ghostty_install_method == "package" or (ghostty_install_method == "auto" and ghostty_pkg_available)
+
+- name: Check Ghostty install state (rpm-ostree)
+  ansible.builtin.command: "rpm-ostree status --json"
+  register: ghostty_ostree_status
+  changed_when: false
+  when:
+    - ghostty_enable
+    - ansible_distribution == "Fedora"
+    - ansible_facts.pkg_mgr == "rpm-ostree"
+    - ghostty_use_copr or ghostty_use_terra
+
+- name: Build rpm-ostree install list (Ghostty)
+  ansible.builtin.set_fact:
+    ghostty_ostree_install_pkgs: >-
+      {{
+        []
+        + (['terra-release'] if (ghostty_use_terra and ('terra-release' not in ghostty_ostree_status.stdout)) else [])
+        + (['ghostty'] if ('ghostty' not in ghostty_ostree_status.stdout) else [])
+      }}
+  when:
+    - ghostty_enable
+    - ansible_distribution == "Fedora"
+    - ansible_facts.pkg_mgr == "rpm-ostree"
+    - ghostty_use_copr or ghostty_use_terra
+    - ghostty_ostree_status is defined
+
+- name: Refresh rpm-ostree metadata (Ghostty)
+  ansible.builtin.command: "rpm-ostree refresh-md"
+  when:
+    - ghostty_enable
+    - ansible_distribution == "Fedora"
+    - ansible_facts.pkg_mgr == "rpm-ostree"
+    - ghostty_use_copr or ghostty_use_terra
+    - ghostty_ostree_install_pkgs is defined
+    - ghostty_ostree_install_pkgs | length > 0
+
+- name: Install Ghostty via rpm-ostree
+  ansible.builtin.command: "rpm-ostree install {{ ghostty_ostree_install_pkgs | join(' ') }}"
+  when:
+    - ghostty_enable
+    - ansible_distribution == "Fedora"
+    - ansible_facts.pkg_mgr == "rpm-ostree"
+    - ghostty_use_copr or ghostty_use_terra
+    - ghostty_ostree_install_pkgs is defined
+    - ghostty_ostree_install_pkgs | length > 0
+
+- name: Install snapd (for Ghostty snap)
+  ansible.builtin.package:
+    name: snapd
+    state: present
+  when:
+    - ghostty_enable
+    - ghostty_snap_enable
+    - ghostty_use_snap or (ghostty_install_method == "auto" and ansible_distribution != "Fedora" and not ghostty_pkg_available | default(false))
+
+- name: Ensure snapd socket is enabled (for Ghostty snap)
+  ansible.builtin.systemd:
+    name: snapd.socket
+    state: started
+    enabled: true
+  failed_when: false
+  when:
+    - ghostty_enable
+    - ghostty_snap_enable
+    - ghostty_use_snap or (ghostty_install_method == "auto" and ansible_distribution != "Fedora" and not ghostty_pkg_available | default(false))
+
+- name: Ensure /snap symlink for classic snaps (Fedora)
+  ansible.builtin.file:
+    src: /var/lib/snapd/snap
+    dest: /snap
+    state: link
+  when:
+    - ghostty_enable
+    - ghostty_snap_enable
+    - ghostty_use_snap or (ghostty_install_method == "auto" and ansible_distribution != "Fedora" and not ghostty_pkg_available | default(false))
+    - ansible_distribution == "Fedora"
+
+- name: Check Ghostty snap installed
+  ansible.builtin.command: "snap list {{ ghostty_snap_name }}"
+  register: ghostty_snap_check
+  changed_when: false
+  failed_when: false
+  when:
+    - ghostty_enable
+    - ghostty_snap_enable
+    - ghostty_use_snap or (ghostty_install_method == "auto" and ansible_distribution != "Fedora" and not ghostty_pkg_available | default(false))
+
+- name: Install Ghostty via snap
+  ansible.builtin.command: >-
+    snap install {{ ghostty_snap_name }}{{ ' --classic' if ghostty_snap_classic else '' }}
+  when:
+    - ghostty_enable
+    - ghostty_snap_enable
+    - ghostty_use_snap or (ghostty_install_method == "auto" and ansible_distribution != "Fedora" and not ghostty_pkg_available | default(false))
+    - ghostty_snap_check is defined
+    - ghostty_snap_check.rc != 0
+
+- name: Ensure Ghostty config directory exists
+  ansible.builtin.file:
+    path: "{{ ghostty_config_dir }}"
+    state: directory
+    owner: "{{ bootstrap_user }}"
+    group: "{{ bootstrap_user }}"
+    mode: "0755"
+  when: ghostty_enable
+
+- name: Install Ghostty config
+  ansible.builtin.copy:
+    dest: "{{ ghostty_config_path }}"
+    content: "{{ ghostty_config_content }}"
+    owner: "{{ bootstrap_user }}"
+    group: "{{ bootstrap_user }}"
+    mode: "0644"
+  when: ghostty_enable
+
+- name: Install uv
+  ansible.builtin.shell: "curl -LsSf https://astral.sh/uv/install.sh | sh"
+  args:
+    creates: "{{ uv_install_path }}"
+  become: true
+  become_user: "{{ bootstrap_user }}"
+  environment:
+    HOME: "{{ bootstrap_home }}"
+  when: uv_install
+
+- name: Install GitButler CLI
+  ansible.builtin.shell: "curl -fsSL {{ gitbutler_cli_install_script }} | sh"
+  args:
+    creates: "{{ gitbutler_cli_path }}"
+  become: true
+  become_user: "{{ bootstrap_user }}"
+  environment:
+    HOME: "{{ bootstrap_home }}"
+  when: gitbutler_cli_enable
+
+- name: List installed flatpak apps
+  ansible.builtin.command: "flatpak list --app --columns=application"
+  register: flatpak_installed_apps
+  changed_when: false
+  when:
+    - flatpak_enable
+    - flatpak_apps_enable
+    - flatpak_apps | length > 0
+
+- name: Install flatpak apps
+  ansible.builtin.command: "flatpak install --system -y {{ flatpak_remote_name }} {{ item }}"
+  when:
+    - flatpak_enable
+    - flatpak_apps_enable
+    - flatpak_apps | length > 0
+    - item not in flatpak_installed_apps.stdout_lines
+  loop: "{{ flatpak_apps }}"
+
+- name: Upgrade apt packages
+  ansible.builtin.apt:
+    upgrade: "{{ apt_upgrade_mode }}"
+  when:
+    - system_upgrade
+    - ansible_facts.pkg_mgr == "apt"
+
+- name: Upgrade dnf packages
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+    update_cache: true
+  when:
+    - system_upgrade
+    - ansible_facts.pkg_mgr == "dnf"
+
+- name: Upgrade yum packages
+  ansible.builtin.yum:
+    name: "*"
+    state: latest
+    update_cache: true
+  when:
+    - system_upgrade
+    - ansible_facts.pkg_mgr == "yum"
+
+- name: Update flatpak apps
+  ansible.builtin.command: "flatpak update --system -y"
+  changed_when: false
+  when:
+    - flatpak_enable
+    - flatpak_update

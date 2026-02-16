@@ -1,0 +1,6 @@
+---
+- name: Core packages bootstrap
+  hosts: all
+  gather_facts: true
+  roles:
+    - packages_setup

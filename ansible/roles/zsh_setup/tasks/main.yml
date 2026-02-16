@@ -1,0 +1,80 @@
+---
+- name: Install zsh tooling packages
+  ansible.builtin.apt:
+    name: "{{ zsh_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Resolve zsh path
+  ansible.builtin.command: "command -v zsh"
+  register: zsh_path
+  changed_when: false
+
+- name: Set default shell for bootstrap user
+  ansible.builtin.user:
+    name: "{{ bootstrap_user }}"
+    shell: "{{ zsh_path.stdout }}"
+  when: zsh_path.stdout | length > 0
+
+- name: Ensure local bin exists
+  ansible.builtin.file:
+    path: "{{ bootstrap_home }}/.local/bin"
+    state: directory
+    owner: "{{ bootstrap_user }}"
+    group: "{{ bootstrap_user }}"
+    mode: "0755"
+
+- name: Ensure zinit directory exists
+  ansible.builtin.file:
+    path: "{{ zinit_dir }}"
+    state: directory
+    owner: "{{ bootstrap_user }}"
+    group: "{{ bootstrap_user }}"
+    mode: "0755"
+
+- name: Install zinit
+  ansible.builtin.git:
+    repo: "{{ zinit_repo }}"
+    dest: "{{ zinit_repo_dest }}"
+    version: HEAD
+    update: true
+  become: true
+  become_user: "{{ bootstrap_user }}"
+  environment:
+    HOME: "{{ bootstrap_home }}"
+
+- name: Install Starship prompt
+  ansible.builtin.shell: "curl -sS https://starship.rs/install.sh | sh -s -- -y"
+  args:
+    creates: "{{ bootstrap_home }}/.local/bin/starship"
+  become: true
+  become_user: "{{ bootstrap_user }}"
+  environment:
+    HOME: "{{ bootstrap_home }}"
+  when: starship_install
+
+- name: Ensure config directory exists
+  ansible.builtin.file:
+    path: "{{ bootstrap_home }}/.config"
+    state: directory
+    owner: "{{ bootstrap_user }}"
+    group: "{{ bootstrap_user }}"
+    mode: "0755"
+
+- name: Install .zshrc
+  ansible.builtin.template:
+    src: zshrc.j2
+    dest: "{{ zshrc_path }}"
+    owner: "{{ bootstrap_user }}"
+    group: "{{ bootstrap_user }}"
+    mode: "0644"
+
+- name: Install Starship config
+  ansible.builtin.template:
+    src: starship.toml.j2
+    dest: "{{ starship_config_path }}"
+    owner: "{{ bootstrap_user }}"
+    group: "{{ bootstrap_user }}"
+    mode: "0644"
+  when: starship_install

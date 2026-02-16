@@ -1,0 +1,180 @@
+---
+bootstrap_user: "{{ ansible_user_id }}"
+bootstrap_home: "{{ ansible_env.HOME | default('/home/' + bootstrap_user) }}"
+
+# -----------------------------
+# Packages (generic groups)
+# -----------------------------
+packages_common:
+  core:
+    - git
+    - curl
+    - wget
+    - ripgrep
+    - fd
+    - fzf
+    - bat
+    - eza
+    - jq
+    - yq
+    - tree
+    - unzip
+    - zip
+    - tar
+  debug:
+    - htop
+    - lsof
+    - strace
+    - tcpdump
+    - mtr
+    - dnsutils
+    - netcat
+  filesystem:
+    - rsync
+    - rclone
+    - btrfs-progs
+    - parted
+    - ntfs-3g
+    - exfatprogs
+  build:
+    - build-essential
+    - python3
+    - python3-pip
+  shell:
+    - zsh
+    - tmux
+    - direnv
+    - starship
+
+packages_common_all: >-
+  {{
+    packages_common.core
+    + packages_common.debug
+    + packages_common.filesystem
+    + packages_common.build
+    + packages_common.shell
+  }}
+
+# Map generic package names to distro-specific names
+package_name_map:
+  Debian:
+    fd: fd-find
+    netcat: netcat-openbsd
+  Ubuntu:
+    fd: fd-find
+    netcat: netcat-openbsd
+  Fedora:
+    dnsutils: bind-utils
+    netcat: nmap-ncat
+    build-essential:
+      - gcc
+      - gcc-c++
+      - make
+  Archlinux:
+    dnsutils: bind
+    netcat: openbsd-netcat
+    python3: python
+    python3-pip: python-pip
+    build-essential:
+      - base-devel
+
+# Optional extras per distro
+packages_extra_by_distro:
+  Debian: []
+  Ubuntu: []
+  Fedora: []
+  Archlinux: []
+
+# -----------------------------
+# Flatpak
+# -----------------------------
+flatpak_enable: true
+flatpak_package: flatpak
+flatpak_remote_name: flathub
+flatpak_remote_url: https://flathub.org/repo/flathub.flatpakrepo
+flatpak_apps_enable: true
+flatpak_apps:
+  - com.valvesoftware.Steam
+  - app.zen_browser.zen
+  - dev.vencord.Vesktop
+flatpak_update: true
+
+# -----------------------------
+# OS repositories (apt-based)
+# -----------------------------
+extra_repos_enable: true
+
+debian_backports_enable: true
+debian_backports_components:
+  - main
+
+ubuntu_universe_enable: true
+ubuntu_multiverse_enable: true
+
+# -----------------------------
+# UV (Python)
+# -----------------------------
+uv_install: true
+uv_install_path: "{{ bootstrap_home }}/.local/bin/uv"
+
+# -----------------------------
+# System upgrade
+# -----------------------------
+system_upgrade: true
+apt_upgrade_mode: "safe"
+
+# -----------------------------
+# VS Code (official repo)
+# -----------------------------
+vscode_enable: true
+vscode_package: code
+vscode_repo_enable: true
+vscode_repo_key_url: https://packages.microsoft.com/keys/microsoft.asc
+vscode_repo_keyring_path: /usr/share/keyrings/microsoft.gpg
+vscode_repo_sources_path: /etc/apt/sources.list.d/vscode.sources
+vscode_repo_sources_content: |
+  Types: deb
+  URIs: https://packages.microsoft.com/repos/code
+  Suites: stable
+  Components: main
+  Architectures: amd64,arm64,armhf
+  Signed-By: /usr/share/keyrings/microsoft.gpg
+vscode_repo_deps_apt:
+  - wget
+  - gpg
+  - apt-transport-https
+vscode_yumrepo_baseurl: https://packages.microsoft.com/yumrepos/vscode
+
+# -----------------------------
+# Ghostty
+# -----------------------------
+ghostty_enable: true
+ghostty_install_method: auto
+ghostty_package_name: ghostty
+
+# Fedora-specific Ghostty sources: copr or terra
+ghostty_fedora_source: copr
+ghostty_fedora_copr: scottames/ghostty
+ghostty_fedora_copr_repo_url: "https://copr.fedorainfracloud.org/coprs/{{ ghostty_fedora_copr }}/repo/fedora-{{ ansible_distribution_major_version }}/{{ ghostty_fedora_copr | replace('/', '-') }}-fedora-{{ ansible_distribution_major_version }}.repo"
+ghostty_fedora_copr_repo_path: /etc/yum.repos.d/_copr:copr.fedorainfracloud.org:scottames:ghostty.repo
+ghostty_fedora_terra_repo_url: https://repos.fyralabs.com/terra$releasever
+ghostty_fedora_terra_repo_path: /etc/yum.repos.d/terra.repo
+ghostty_fedora_terra_release: terra-release
+
+ghostty_snap_enable: true
+ghostty_snap_name: ghostty
+ghostty_snap_classic: true
+
+ghostty_config_dir: "{{ bootstrap_home }}/.config/ghostty"
+ghostty_config_path: "{{ ghostty_config_dir }}/config"
+# Keep this minimal; users can customize later.
+ghostty_config_content: |
+  # Ghostty config (key = value)
+  # Location: ~/.config/ghostty/config
+
+# -----------------------------
+# GitButler CLI (but)
+# -----------------------------
+gitbutler_cli_enable: true
+gitbutler_cli_install_script: https://gitbutler.com/install.sh
+gitbutler_cli_path: "{{ bootstrap_home }}/.local/bin/but"

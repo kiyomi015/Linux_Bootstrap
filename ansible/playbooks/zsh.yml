@@ -1,0 +1,6 @@
+---
+- name: Zsh bootstrap
+  hosts: all
+  gather_facts: true
+  roles:
+    - zsh_setup
