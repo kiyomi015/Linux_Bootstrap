@@ -1,0 +1,26 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*.bak
+*~
+
+# Ansible
+*.retry
+.ansible/
+
+# Local overrides
+.env
+.env.*
+.direnv/
+.venv/
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Temporary
+/tmp/
