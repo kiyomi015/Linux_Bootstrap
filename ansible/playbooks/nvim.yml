@@ -1,6 +1,0 @@
----
-- name: Neovim bootstrap
-  hosts: all
-  gather_facts: true
-  roles:
-    - nvim_setup

@@ -40,11 +40,36 @@ packages_common:
     - build-essential
     - python3
     - python3-pip
+  editors:
+    - neovim
   shell:
     - zsh
     - tmux
     - direnv
     - starship
+    - chezmoi
+  desktop_wayland:
+    - hyprland
+    - waybar
+    - wofi
+    - rofi
+    - swaync
+    - wlogout
+    - hyprpaper
+    - grim
+    - slurp
+    - swappy
+    - wl-clipboard
+    - mako
+    - cava
+    - fastfetch
+    - kvantum
+    - qt5ct
+    - qt6ct
+    - quickshell
+    - wallust
+
+hyprland_stack_enable: true
 
 packages_common_all: >-
   {{
@@ -52,7 +77,9 @@ packages_common_all: >-
     + packages_common.debug
     + packages_common.filesystem
     + packages_common.build
+    + packages_common.editors
     + packages_common.shell
+    + (packages_common.desktop_wayland if hyprland_stack_enable else [])
   }}
 
 # Map generic package names to distro-specific names
@@ -70,6 +97,11 @@ package_name_map:
       - gcc
       - gcc-c++
       - make
+    rofi: rofi-wayland
+    swaync: SwayNotificationCenter
+    kvantum:
+      - kvantum
+      - kvantum-qt5
   Archlinux:
     dnsutils: bind
     netcat: openbsd-netcat
@@ -77,6 +109,24 @@ package_name_map:
     python3-pip: python-pip
     build-essential:
       - base-devel
+    swaync: swaync
+
+copr_enable: true
+
+swaync_copr_enable: true
+swaync_copr: erikreider/SwayNotificationCenter
+swaync_copr_repo_url: "https://copr.fedorainfracloud.org/coprs/{{ swaync_copr }}/repo/fedora-{{ ansible_distribution_major_version }}/{{ swaync_copr | replace('/', '-') }}-fedora-{{ ansible_distribution_major_version }}.repo"
+swaync_copr_repo_path: /etc/yum.repos.d/_copr:copr.fedorainfracloud.org:erikreider:SwayNotificationCenter.repo
+
+wallust_copr_enable: true
+wallust_copr: materka/wallust
+wallust_copr_repo_url: "https://copr.fedorainfracloud.org/coprs/{{ wallust_copr }}/repo/fedora-{{ ansible_distribution_major_version }}/{{ wallust_copr | replace('/', '-') }}-fedora-{{ ansible_distribution_major_version }}.repo"
+wallust_copr_repo_path: /etc/yum.repos.d/_copr:copr.fedorainfracloud.org:materka:wallust.repo
+
+quickshell_copr_enable: false
+quickshell_copr: errornointernet/quickshell
+quickshell_copr_repo_url: "https://copr.fedorainfracloud.org/coprs/{{ quickshell_copr }}/repo/fedora-{{ ansible_distribution_major_version }}/{{ quickshell_copr | replace('/', '-') }}-fedora-{{ ansible_distribution_major_version }}.repo"
+quickshell_copr_repo_path: /etc/yum.repos.d/_copr:copr.fedorainfracloud.org:errornointernet:quickshell.repo
 
 # Optional extras per distro
 packages_extra_by_distro:
@@ -164,13 +214,6 @@ ghostty_fedora_terra_release: terra-release
 ghostty_snap_enable: true
 ghostty_snap_name: ghostty
 ghostty_snap_classic: true
-
-ghostty_config_dir: "{{ bootstrap_home }}/.config/ghostty"
-ghostty_config_path: "{{ ghostty_config_dir }}/config"
-# Keep this minimal; users can customize later.
-ghostty_config_content: |
-  # Ghostty config (key = value)
-  # Location: ~/.config/ghostty/config
 
 # -----------------------------
 # GitButler CLI (but)

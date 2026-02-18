@@ -1,36 +1,56 @@
 # desktopBootstrap
 
-Opinionated desktop bootstrap for Linux using Ansible + Just.
+System bootstrap repo using Ansible + Just. This repo is responsible for system state: packages, repos, and base system configuration.
+
+## Repos
+
+- `desktopBootstrap/` (this repo): system convergence
+- `dotfiles/` (sibling repo): chezmoi source for user configs
 
 ## Quick start
 
 ```bash
-just install
+DOTFILES_REPO=git@github.com:you/dotfiles.git just bootstrap
 ```
 
-Other targets:
+Or use the sibling repo:
 
 ```bash
-just up
+just bootstrap
+```
+
+## How it works
+
+- Ansible installs packages, repos, and system defaults.
+- Chezmoi applies user dotfiles from the sibling repo or a git URL.
+- Optional dotfiles bootstrap hook runs after apply for user-level setup.
+
+## Just targets
+
+```bash
+just bootstrap
 just packages
 just zsh
-just nvim
+just dotfiles
+just dotfiles-apply
+just dotfiles-add ~/.zshrc ~/.config/...
+just dotfiles-push
 ```
 
 ## Layout
 
 - `ansible/`
   - `playbooks/` entry points
-  - `roles/` all roles (packages, zsh, nvim)
+  - `roles/` system roles (packages, zsh, dotfiles)
 - `justfile` task runner
 
 ## Configuration
 
-Primary defaults live in:
+Defaults live in:
 
 - `ansible/roles/packages_setup/defaults/main.yml`
 - `ansible/roles/zsh_setup/defaults/main.yml`
-- `ansible/roles/nvim_setup/defaults/main.yml`
+- `ansible/roles/dotfiles_setup/defaults/main.yml`
 
 Common changes:
 
@@ -45,9 +65,16 @@ Common changes:
 
 - The `site.yml` playbook runs all roles in order.
 - `packages_setup` performs package installs, repo setup, and upgrades.
-- `zsh_setup` sets Zsh as the default shell for `bootstrap_user`.
+- `dotfiles_setup` runs `chezmoi init --apply` (first run) or `chezmoi apply` (subsequent runs).
 
 ## Requirements
 
 - Ansible installed on the host
-- `just` installed for task running
+- `just` recommended for task running
+- `chezmoi` for dotfiles
+
+## Next steps (suggestions)
+
+1. Add a `desktop` package group in `packages_setup` for Hyprland stack packages.
+2. Add per-host inventories (`laptop`, `server`, `workstation`) to control package sets.
+3. Add a secrets strategy (Ansible Vault or `age` in dotfiles).

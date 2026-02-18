@@ -1,0 +1,17 @@
+---
+bootstrap_user: "{{ ansible_user_id }}"
+bootstrap_home: "{{ ansible_env.HOME | default('/home/' + bootstrap_user) }}"
+
+# Set one of these:
+# - DOTFILES_REPO env var (git URL)
+# - DOTFILES_SOURCE env var (local path)
+# Defaults to ~/dotfiles
+
+dotfiles_repo: "{{ lookup('env', 'DOTFILES_REPO') | default('', true) }}"
+dotfiles_source: "{{ lookup('env', 'DOTFILES_SOURCE') | default(bootstrap_home + '/dotfiles', true) }}"
+
+chezmoi_source_dir: "{{ bootstrap_home }}/.local/share/chezmoi"
+dotfiles_apply: true
+
+dotfiles_bootstrap_enable: true
+dotfiles_bootstrap_name: bootstrap.sh

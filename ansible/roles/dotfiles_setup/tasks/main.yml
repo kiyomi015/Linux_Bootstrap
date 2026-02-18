@@ -1,0 +1,105 @@
+---
+- name: Dotfiles discovery
+  block:
+    - name: Check dotfiles source path
+      ansible.builtin.stat:
+        path: "{{ dotfiles_source }}"
+      register: dotfiles_source_stat
+      when: dotfiles_source | length > 0
+
+    - name: Determine dotfiles init method
+      ansible.builtin.set_fact:
+        dotfiles_use_repo: "{{ dotfiles_repo | length > 0 }}"
+        dotfiles_use_source: >-
+          {{
+            (dotfiles_repo | length == 0)
+            and (dotfiles_source | length > 0)
+            and (dotfiles_source_stat is defined and dotfiles_source_stat.stat.exists)
+          }}
+
+    - name: Fail when no dotfiles repo or source is available
+      ansible.builtin.fail:
+        msg: >-
+          Set DOTFILES_REPO to a git URL or ensure DOTFILES_SOURCE exists at
+          {{ dotfiles_source }}.
+      when:
+        - dotfiles_apply
+        - not dotfiles_use_repo
+        - not dotfiles_use_source
+
+    - name: Check chezmoi installed
+      ansible.builtin.command: "command -v chezmoi"
+      register: chezmoi_path
+      changed_when: false
+      failed_when: chezmoi_path.rc != 0
+
+    - name: Check existing chezmoi source
+      ansible.builtin.stat:
+        path: "{{ chezmoi_source_dir }}"
+      register: chezmoi_source_stat
+
+- name: Chezmoi init/apply
+  block:
+    - name: Initialize chezmoi from repo
+      ansible.builtin.command: "chezmoi init --apply {{ dotfiles_repo }}"
+      become: true
+      become_user: "{{ bootstrap_user }}"
+      environment:
+        HOME: "{{ bootstrap_home }}"
+      when:
+        - dotfiles_apply
+        - dotfiles_use_repo
+        - not chezmoi_source_stat.stat.exists
+
+    - name: Initialize chezmoi from local source
+      ansible.builtin.command: "chezmoi init --apply --source {{ dotfiles_source }}"
+      become: true
+      become_user: "{{ bootstrap_user }}"
+      environment:
+        HOME: "{{ bootstrap_home }}"
+      when:
+        - dotfiles_apply
+        - dotfiles_use_source
+        - not chezmoi_source_stat.stat.exists
+
+    - name: Apply chezmoi
+      ansible.builtin.command: "chezmoi apply"
+      become: true
+      become_user: "{{ bootstrap_user }}"
+      environment:
+        HOME: "{{ bootstrap_home }}"
+      when:
+        - dotfiles_apply
+        - chezmoi_source_stat.stat.exists
+
+- name: Dotfiles bootstrap hook
+  block:
+    - name: Resolve chezmoi source path
+      ansible.builtin.command: "chezmoi source-path"
+      register: dotfiles_source_path
+      changed_when: false
+      become: true
+      become_user: "{{ bootstrap_user }}"
+      environment:
+        HOME: "{{ bootstrap_home }}"
+
+    - name: Check dotfiles bootstrap script
+      ansible.builtin.stat:
+        path: "{{ dotfiles_source_path.stdout }}/{{ dotfiles_bootstrap_name }}"
+      register: dotfiles_bootstrap_stat
+      when: dotfiles_source_path.stdout | length > 0
+
+    - name: Run dotfiles bootstrap script
+      ansible.builtin.command: "{{ dotfiles_bootstrap_stat.stat.path }}"
+      args:
+        chdir: "{{ dotfiles_source_path.stdout }}"
+      become: true
+      become_user: "{{ bootstrap_user }}"
+      environment:
+        HOME: "{{ bootstrap_home }}"
+      when:
+        - dotfiles_bootstrap_stat is defined
+        - dotfiles_bootstrap_stat.stat.exists
+  when:
+    - dotfiles_bootstrap_enable
+    - dotfiles_apply
