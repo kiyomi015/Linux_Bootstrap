@@ -423,6 +423,24 @@
 
 - name: User tooling
   block:
+    - name: Check cargo installed
+      ansible.builtin.command: "command -v cargo"
+      register: cargo_path
+      changed_when: false
+      failed_when: false
+
+    - name: Install exa via cargo
+      ansible.builtin.command: "cargo install {{ exa_cargo_package }}"
+      args:
+        creates: "{{ exa_cargo_bin }}"
+      become: true
+      become_user: "{{ bootstrap_user }}"
+      environment:
+        HOME: "{{ bootstrap_home }}"
+      when:
+        - exa_install
+        - cargo_path.rc == 0
+
     - name: Install uv
       ansible.builtin.shell: "curl -LsSf https://astral.sh/uv/install.sh | sh"
       args:
